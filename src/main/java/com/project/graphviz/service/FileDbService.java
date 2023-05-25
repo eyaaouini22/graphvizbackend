@@ -1,41 +1,30 @@
 package com.project.graphviz.service;
 
-import java.io.File;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
-import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
-import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import com.project.graphviz.model.FileDb;
 import com.project.graphviz.model.FileResponse;
-import com.project.graphviz.repository.FileDbRepository;
 
-@Service
-
+//@Service
 public class FileDbService implements IFileDbService {
 
-	@Autowired
-	private FileDbRepository fileDbRepository;
-	private Path fileStoragePath;
-	private String fileStorageLocation;
+	protected Path fileStoragePath;
+	protected String fileStorageLocation;
 
 	public FileDbService(@Value("${file.storage.location:temp}") String fileStorageLocation) {
-
 		this.fileStorageLocation = fileStorageLocation;
 		fileStoragePath = Paths.get(fileStorageLocation).toAbsolutePath().normalize();
 
@@ -47,24 +36,22 @@ public class FileDbService implements IFileDbService {
 	}
 
 	@Override
-	public FileResponse uploadAndstore(MultipartFile file) throws IOException {
-		String fileName = file.getOriginalFilename();
-		file.transferTo(new File(fileStorageLocation + fileName));
-		FileDb fileDb = saveFile(file, fileName);
-		return mapToFileResponse(fileDb);
-	}
-
-	@Override
 	public FileResponse storeFile(MultipartFile file) {
-		String fileName = StringUtils.cleanPath(file.getOriginalFilename());
+		final String uid = UUID.randomUUID().toString();
+		String fileName = StringUtils.cleanPath(file.getOriginalFilename()) + uid;
 		Path filePath = Paths.get(fileStoragePath + "/" + fileName);
 		try {
 			Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
 		} catch (IOException e) {
 			throw new RuntimeException("Issue in storing the file", e);
 		}
-		FileDb fileDb = saveFile(file, fileName);
+		FileDb fileDb = saveFile(uid, file, fileName);
 		return mapToFileResponse(fileDb);
+	}
+
+	@Override
+	public FileDb saveFile(String uid, MultipartFile file, String fileName) {
+		return new FileDb();
 	}
 
 	@Override
@@ -87,37 +74,31 @@ public class FileDbService implements IFileDbService {
 		}
 	}
 
-	private FileDb saveFile(MultipartFile file, String fileName) {
-		final FileDb fileDb = new FileDb(UUID.randomUUID().toString(), fileName, file.getContentType());
-		fileDbRepository.save(fileDb);
-		return fileDb;
-	}
-
 	@Override
-	public FileDb getFileById(String id) {
-
-		Optional<FileDb> fileOptional = fileDbRepository.findById(id);
-
-		if (fileOptional.isPresent()) {
-			return fileOptional.get();
-		}
-		return null;
-	}
-
-	@Override
-	public List<FileResponse> getFileList() {
-		return fileDbRepository.findAll().stream().map(this::mapToFileResponse).collect(Collectors.toList());
-	}
-
-	private FileResponse mapToFileResponse(FileDb fileDb) {
+	public FileResponse mapToFileResponse(FileDb fileDb) {
 		String url = ServletUriComponentsBuilder.fromCurrentContextPath().path("/graph/download/")
 				.path(fileDb.getName()).toUriString();
-		return new FileResponse(fileDb.getId(), fileDb.getType(), fileDb.getName(), url);
+		return new FileResponse(fileDb.getId(), fileDb.getType(), fileDb.getName(), url, fileDb.getSize(),
+				fileDb.getCreatedAt());
 	}
 
 	@Override
 	public String getFileStorageLocation() {
 		return fileStorageLocation;
 	}
+
+//	@Override
+//	public String modifyImage(FileDb fileDb) {
+//		fileDbRepository.save(fileDb);
+//		return fileDb.getName();
+//	}
+//
+
+//
+//	@Override
+//	public FileDb findFirstByName(String name) {
+//		List<FileDb> list = fileDbRepository.findByName(name);
+//		return list.isEmpty() ? null : fileDbRepository.findByName(name).get(0);
+//	}
 
 }
